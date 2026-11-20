@@ -1,75 +1,86 @@
 
 from PIL import Image, ImageDraw
 import os
+import subprocess
+import math
+import shutil
 
-WIDTH = 720
-HEIGHT = 1280
-FPS = 24
+W, H = 450, 800
+FPS = 15
 DURATION = 48
 
-os.makedirs("output", exist_ok=True)
+OUT = "output"
+FRAMES = f"{OUT}/frames"
 
-def draw_stickman(draw, x, y, pose="normal"):
+os.makedirs(FRAMES, exist_ok=True)
+
+def draw_frame(t):
+    im = Image.new("RGB", (W, H), "white")
+    d = ImageDraw.Draw(im)
+
+    # Scene animation
+    if t < 15:
+        x = 225 + int(70 * math.sin(t * 2))
+        title = "WATCH ME!"
+    elif t < 30:
+        x = 225 + int(100 * math.sin(t * 4))
+        title = "OOPS!"
+    else:
+        x = 225
+        title = "I MEANT TO DO THAT!"
+
+    y = 350 if t < 30 else 400
+
     # Head
-    draw.ellipse((x-35, y-130, x+35, y-60),
-                 outline="black", width=8)
+    d.ellipse((x-28, y-120, x+28, y-64),
+              outline="black", width=6)
+
+    # Sunglasses
+    if t < 15:
+        d.line((x-24, y-95, x+24, y-95),
+               fill="black", width=7)
 
     # Body
-    draw.line((x, y-60, x, y+80),
-              fill="black", width=9)
+    d.line((x, y-64, x, y+65),
+           fill="black", width=7)
 
     # Arms
-    if pose == "cool":
-        draw.line((x, y-30, x-75, y-85),
-                  fill="black", width=8)
-        draw.line((x, y-30, x+75, y-85),
-                  fill="black", width=8)
-    else:
-        draw.line((x, y-30, x-65, y+20),
-                  fill="black", width=8)
-        draw.line((x, y-30, x+65, y+20),
-                  fill="black", width=8)
+    arm = int(35 * math.sin(t * 3))
+    d.line((x, y-35, x-55, y+arm),
+           fill="black", width=6)
+    d.line((x, y-35, x+55, y-arm),
+           fill="black", width=6)
 
     # Legs
-    draw.line((x, y+80, x-55, y+160),
-              fill="black", width=9)
-    draw.line((x, y+80, x+55, y+160),
-              fill="black", width=9)
+    d.line((x, y+65, x-40, y+125),
+           fill="black", width=7)
+    d.line((x, y+65, x+40, y+125),
+           fill="black", width=7)
 
-def make_frame(second):
-    image = Image.new("RGB", (WIDTH, HEIGHT), "white")
-    draw = ImageDraw.Draw(image)
+    d.text((90, 100), title, fill="black", stroke_width=1)
 
-    x = WIDTH // 2
-    y = 520
-
-    pose = "cool" if second < 20 else "normal"
-
-    if 20 <= second < 35:
-        x += int(120 * ((second % 2) - 1))
-
-    if second >= 35:
-        y += 100
-
-    draw_stickman(draw, x, y, pose)
-
-    message = (
-        "WATCH ME!" if second < 20
-        else "OOPS!" if second < 35
-        else "I MEANT TO DO THAT!"
-    )
-
-    draw.text((150, 150), message, fill="black")
-
-    return image
+    return im
 
 def main():
-    for second in range(DURATION):
-        frame = make_frame(second)
-        frame.save(f"output/frame_{second:03d}.png")
+    for i in range(FPS * DURATION):
+        t = i / FPS
+        frame = draw_frame(t)
+        frame.save(f"{FRAMES}/frame_{i:05d}.jpg", quality=85)
 
-    print("48 scene frames created successfully!")
+    subprocess.run([
+        "ffmpeg", "-y",
+        "-framerate", str(FPS),
+        "-i", f"{FRAMES}/frame_%05d.jpg",
+        "-vf", "scale=720:1280",
+        "-c:v", "libx264",
+        "-pix_fmt", "yuv420p",
+        "-movflags", "+faststart",
+        f"{OUT}/darkframe_short.mp4"
+    ], check=True)
+
+    shutil.rmtree(FRAMES)
+    print("MP4 render completed!")
 
 if __name__ == "__main__":
     main()
-  
+    
